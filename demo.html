@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>線圖測試</title>
+    <title>台股即時看板與匯率監測</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -21,51 +21,36 @@
         button:hover { background: #0056b3; }
         button:disabled { background: #ccc; cursor: not-allowed; }
 
-        /* 版面配置：左圖右表 (Flexbox) */
+        /* 版面配置 */
         .dashboard-layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
         
-        /* --- 左側：圖表區 (佔 70%) --- */
+        /* --- 左側：圖表區 --- */
         .chart-panel { flex: 2; min-width: 600px; display: flex; flex-direction: column; }
-        
-        /* Tab 按鈕樣式 */
         .tabs { display: flex; gap: 5px; margin-bottom: 0; border-bottom: 1px solid #eee; }
         .tab-btn { padding: 10px 20px; background: #f9f9f9; border: 1px solid #eee; border-bottom: none; cursor: pointer; color: #666; border-radius: 6px 6px 0 0; font-weight: 500; margin-bottom: -1px; }
         .tab-btn.active { background: white; color: #007bff; border-top: 3px solid #007bff; border-bottom: 1px solid white; font-weight: bold; }
-        
-        /* ECharts 容器 */
         #chart { width: 100%; height: 550px; border: 1px solid #eee; border-top: none; background: #fff; border-radius: 0 0 6px 6px; }
 
-        /* --- 右側：報價資訊區 (佔 30%) --- */
-        .info-panel { flex: 1; min-width: 300px; background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        /* --- 右側：資訊區 --- */
+        .info-wrapper { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 20px; }
+        .info-panel { background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         
-        /* 股票頭部資訊 */
         .stock-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; }
         .stock-title { display: flex; align-items: baseline; justify-content: space-between; }
-        .stock-name { font-size: 1.4em; font-weight: bold; color: #333; }
-        .stock-code { color: #666; font-size: 1em; }
+        .stock-name { font-size: 1.2em; font-weight: bold; color: #333; }
         .update-time { font-size: 0.8em; color: #999; margin-top: 5px; display: block; }
 
-        /* 數據網格 (Grid Layout) */
-        .data-grid { display: grid; grid-template-columns: 1fr 1fr; /* 兩欄 */ }
-        
-        .data-row { 
-            display: flex; justify-content: space-between; align-items: center; 
-            padding: 12px 15px; 
-            border-bottom: 1px solid #f0f0f0; 
-            font-size: 0.95em;
-        }
-        /* 讓右邊那欄有左邊框線，做出分隔感 */
+        .data-grid { display: grid; grid-template-columns: 1fr 1fr; }
+        .data-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-bottom: 1px solid #f0f0f0; font-size: 0.95em; }
         .col-right .data-row { border-left: 1px solid #f0f0f0; }
 
         .label { color: #666; font-size: 0.9em; }
-        .value { font-weight: bold; font-family: 'Roboto Mono', Consolas, monospace; font-size: 1.1em; }
+        .value { font-weight: bold; font-family: 'Roboto Mono', monospace; font-size: 1.1em; }
 
-        /* 顏色與狀態類 */
+        /* 顏色 */
         .text-red { color: #ef232a; }
         .text-green { color: #14b143; }
         .text-black { color: #333; }
-        .bg-red-light { background-color: #fff5f5; } 
-        .bg-green-light { background-color: #f0fff4; } 
 
         .error-msg { color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 4px; margin-top: 10px; }
         .loading-text { text-align: center; color: #666; padding: 20px; }
@@ -85,7 +70,6 @@
         <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
 
         <div class="dashboard-layout" v-if="hasData">
-            
             <div class="chart-panel">
                 <div class="tabs">
                     <button class="tab-btn" :class="{ active: chartType === 'daily' }" @click="switchTab('daily')">日 K 線分析</button>
@@ -94,324 +78,64 @@
                 <div id="chart"></div>
             </div>
 
-            <div class="info-panel" v-if="rtData">
-                <div class="stock-header">
+            <div class="info-wrapper">
+                <div class="info-panel" v-if="rtData">
+                    <div class="stock-header">
+                        <div class="stock-title">
+                            <span class="stock-name">{{ rtData.name }} ({{ rtData.code }})</span>
+                        </div>
+                        <span class="update-time">資料時間: {{ formatTime(rtData.timestamp) }}</span>
+                    </div>
+                    <div class="data-grid">
+                        <div class="col-left">
+                            <div class="data-row"><span class="label">成交價</span><span class="value" :class="getColor(rtData.price, rtData.prev_close)">{{ rtData.price }}</span></div>
+                            <div class="data-row"><span class="label">最高</span><span class="value" :class="getColor(rtData.high, rtData.prev_close)">{{ rtData.high }}</span></div>
+                            <div class="data-row"><span class="label">最低</span><span class="value" :class="getColor(rtData.low, rtData.prev_close)">{{ rtData.low }}</span></div>
+                        </div>
+                        <div class="col-right">
+                            <div class="data-row"><span class="label">漲跌幅</span><span class="value" :class="getDiffColor(rtData.change)">{{ rtData.change_percent }}%</span></div>
+                            <div class="data-row"><span class="label">昨收</span><span class="value">{{ rtData.prev_close }}</span></div>
+                            <div class="data-row"><span class="label">總量</span><span class="value">{{ rtData.volume }}</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-panel" v-if="forexData || true"> <div class="stock-header" style="background: #eef2f7;">
                     <div class="stock-title">
-                        <span class="stock-name">{{ rtData.name }}</span>
-                        <span class="stock-code">{{ rtData.code }}</span>
-                    </div>
-                    <span class="update-time">資料時間: {{ formatTime(rtData.timestamp) }}</span>
-                </div>
-
-                <div class="data-grid">
-                    <div class="col-left">
-                        <div class="data-row">
-                            <span class="label">成交價</span>
-                            <span class="value" :class="getColor(rtData.price, rtData.prev_close)">{{ rtData.price }}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="label">開盤</span>
-                            <span class="value" :class="getColor(rtData.open, rtData.prev_close)">{{ rtData.open }}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="label">最高</span>
-                            <span class="value" :class="getColor(rtData.high, rtData.prev_close)">{{ rtData.high }}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="label">最低</span>
-                            <span class="value" :class="getColor(rtData.low, rtData.prev_close)">{{ rtData.low }}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="label">昨收</span>
-                            <span class="value">{{ rtData.prev_close }}</span>
-                        </div>
-                    </div>
-
-                    <div class="col-right">
-                        <div class="data-row">
-                            <span class="label">漲跌幅</span>
-                            <span class="value" :class="getDiffColor(rtData.change)">{{ rtData.change_percent }}%</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="label">漲跌價</span>
-                            <span class="value" :class="getDiffColor(rtData.change)">
-                                {{ rtData.change > 0 ? '▲' : (rtData.change < 0 ? '▼' : '') }} {{ Math.abs(rtData.change) }}
-                            </span>
-                        </div>
-                        <div class="data-row">
-                            <span class="label">買進</span>
-                            <span class="value" :class="getColor(rtData.bid, rtData.prev_close)">{{ rtData.bid || '-' }}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="label">賣出</span>
-                            <span class="value" :class="getColor(rtData.ask, rtData.prev_close)">{{ rtData.ask || '-' }}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="label">總量</span>
-                            <span class="value">{{ rtData.volume }}</span>
-                        </div>
-                    </div>
-                    
-                    <div class="data-row" style="grid-column: 1 / -1; border-bottom: none; justify-content: center; background: #fafafa; color: #888; font-size: 0.85em;">
-                        成交金額(億): {{ rtData.amount }} | 均價: {{ rtData.avg_price }}
+                        <span class="stock-name">匯率查詢</span>
                     </div>
                 </div>
+                <div style="padding: 10px; display: flex; gap: 5px; border-bottom: 1px solid #eee;">
+                    <input type="text" v-model="forexPair" placeholder="例如: JPYTWD" style="padding: 5px; font-size: 14px;">
+                    <button @click="queryForex" style="padding: 5px 10px; font-size: 14px;">查詢</button>
+                </div>
+                
+                <div class="data-grid" v-if="forexData">
+                    <div class="data-row" style="grid-column: 1 / -1;">
+                        <span class="label">貨幣對</span>
+                        <span class="value">{{ forexData.pair }}</span>
+                    </div>
+                    <div class="data-row" style="grid-column: 1 / -1;">
+                        <span class="label">即時匯率</span>
+                        <span class="value">{{ forexData.rate }}</span>
+                    </div>
+                    <div class="data-row" style="grid-column: 1 / -1;">
+                        <span class="label">漲跌幅</span>
+                        <span class="value" :class="getDiffColor(forexData.change)">
+                            {{ forexData.change_percent }}%
+                        </span>
+                    </div>
+                </div>
+                <div v-else style="padding: 20px; text-align: center; color: #999;">
+                    請輸入貨幣對進行查詢
+                </div>
+            </div>
             </div>
         </div>
         
         <div v-else-if="loading" class="loading-text">資料讀取中...</div>
     </div>
 
-    <script>
-        const { createApp, ref, onMounted, nextTick } = Vue;
-
-        createApp({
-            setup() {
-                const stockId = ref('2330');
-                const loading = ref(false);
-                const rtData = ref(null);
-                const errorMsg = ref('');
-                const chartType = ref('daily');
-                const hasData = ref(false);
-                let chartInstance = null;
-                const cacheData = { daily: null, intraday: null };
-
-                onMounted(() => {
-                    window.addEventListener('resize', () => {
-                        chartInstance && chartInstance.resize();
-                    });
-                    // 預設執行一次查詢
-                    handleSearch(); 
-                });
-
-                const initChart = () => {
-                    const chartDom = document.getElementById('chart');
-                    if (chartDom && !chartInstance) {
-                        chartInstance = echarts.init(chartDom);
-                    }
-                };
-
-                // 輔助函式: 判斷顏色
-                const getColor = (val, ref) => {
-                    if (val == null || ref == null) return 'text-black';
-                    return val > ref ? 'text-red' : (val < ref ? 'text-green' : 'text-black');
-                };
-
-                const getDiffColor = (val) => {
-                    if (val == null) return 'text-black';
-                    return val > 0 ? 'text-red' : (val < 0 ? 'text-green' : 'text-black');
-                };
-
-                const formatTime = (ts) => {
-                    if (!ts) return '-';
-                    return new Date(ts * 1000).toLocaleTimeString('zh-TW', { hour12: false });
-                };
-
-                // 主查詢函式
-                const handleSearch = async () => {
-                    if (!stockId.value) return;
-                    loading.value = true;
-                    errorMsg.value = '';
-                    
-                    cacheData.daily = null;
-                    cacheData.intraday = null;
-                    rtData.value = null;
-
-                    try {
-                        const promises = [
-                            axios.get(`http://127.0.0.1:8000/api/realtime/${stockId.value}`),
-                            chartType.value === 'daily' 
-                                ? axios.get(`http://127.0.0.1:8000/api/stock/${stockId.value}`)
-                                : axios.get(`http://127.0.0.1:8000/api/intraday/${stockId.value}`)
-                        ];
-
-                        const [rtRes, chartRes] = await Promise.all(promises);
-
-                        rtData.value = rtRes.data;
-                        hasData.value = true;
-
-                        await nextTick();
-                        initChart();
-
-                        if (chartType.value === 'daily') {
-                            cacheData.daily = chartRes.data;
-                            renderDailyChart(chartRes.data);
-                        } else {
-                            cacheData.intraday = chartRes.data;
-                            renderIntradayChart(chartRes.data);
-                        }
-
-                    } catch (e) {
-                        console.error(e);
-                        errorMsg.value = '讀取失敗：' + (e.response?.data?.detail || e.message);
-                        if (chartInstance) chartInstance.clear(); // [FIX] 加了判斷，只有 instance 存在才 clear
-                    } finally {
-                        loading.value = false;
-                    }
-                };
-
-                // 切換 Tab
-                const switchTab = async (type) => {
-                    if (chartType.value === type) return;
-                    chartType.value = type;
-                    
-                    loading.value = true;
-                    
-                    // 確保圖表已初始化
-                    await nextTick();
-                    initChart();
-
-                    try {
-                        if (type === 'daily') {
-                            if (cacheData.daily) {
-                                renderDailyChart(cacheData.daily);
-                            } else {
-                                const res = await axios.get(`http://127.0.0.1:8000/api/stock/${stockId.value}`);
-                                cacheData.daily = res.data;
-                                renderDailyChart(res.data);
-                            }
-                        } else {
-                            if (cacheData.intraday) {
-                                renderIntradayChart(cacheData.intraday);
-                            } else {
-                                const res = await axios.get(`http://127.0.0.1:8000/api/intraday/${stockId.value}`);
-                                cacheData.intraday = res.data;
-                                renderIntradayChart(res.data);
-                            }
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        errorMsg.value = '切換圖表失敗';
-                        if (chartInstance) chartInstance.clear();
-                    } finally {
-                        loading.value = false;
-                    }
-                };
-
-                // --- 繪製日 K 線 ---
-                const renderDailyChart = (data) => {
-                    const option = {
-                        animation: false,
-                        title: { text: '', left: 'center' },
-                        tooltip: { 
-                            trigger: 'axis', 
-                            axisPointer: { type: 'cross' },
-                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                            borderColor: '#ccc',
-                            textStyle: { color: '#333' }
-                        },
-                        legend: { data: ['日K', 'MA5', 'MA20', 'MA60'], top: 10 },
-                        grid: { left: '10%', right: '5%', bottom: '15%', top: '15%' },
-                        xAxis: { 
-                            type: 'category', 
-                            data: data.dates, 
-                            scale: true, 
-                            boundaryGap: false,
-                            axisLine: { lineStyle: { color: '#666' } }
-                        },
-                        yAxis: { 
-                            scale: true, 
-                            splitLine: { show: true, lineStyle: { color: '#eee' } } 
-                        },
-                        dataZoom: [
-                            { type: 'inside', start: 70, end: 100 },
-                            { show: true, type: 'slider', top: '92%', start: 70, end: 100 }
-                        ],
-                        series: [
-                            {
-                                name: '日K',
-                                type: 'candlestick',
-                                data: data.values,
-                                itemStyle: {
-                                    color: '#ef232a',     
-                                    color0: '#14b143',    
-                                    borderColor: '#ef232a',
-                                    borderColor0: '#14b143'
-                                }
-                            },
-                            { name: 'MA5', type: 'line', data: data.ma5, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#f39c12' } },
-                            { name: 'MA20', type: 'line', data: data.ma20, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#9b59b6' } },
-                            { name: 'MA60', type: 'line', data: data.ma60, smooth: true, showSymbol: false, lineStyle: { width: 2, color: '#2ecc71' } }
-                        ]
-                    };
-                    chartInstance.clear();
-                    chartInstance.setOption(option);
-                };
-
-                // --- 繪製即時走勢圖 ---
-                const renderIntradayChart = (data) => {
-                    const lastPrice = data.prices[data.prices.length - 1];
-                    const color = lastPrice >= data.ref_price ? '#ef232a' : '#14b143';
-                    
-                    const option = {
-                        animation: false,
-                        title: { text: '', left: 'center' },
-                        tooltip: { 
-                            trigger: 'axis', 
-                            axisPointer: { type: 'line' },
-                            formatter: function(params) {
-                                const p = params[0];
-                                return `${p.name}<br/>價格: <b>${p.value}</b>`;
-                            }
-                        },
-                        grid: { left: '10%', right: '5%', bottom: '10%', top: '15%' },
-                        xAxis: { 
-                            type: 'category', 
-                            data: data.times,
-                            boundaryGap: false,
-                            axisLabel: { interval: 59, showMinLabel: true, showMaxLabel: true } 
-                        },
-                        yAxis: { 
-                            scale: true, 
-                            splitLine: { show: true, lineStyle: { color: '#eee' } },
-                            min: (value) => Math.min(value.min, data.ref_price),
-                            max: (value) => Math.max(value.max, data.ref_price)
-                        },
-                        series: [
-                            {
-                                name: '價格',
-                                type: 'line',
-                                data: data.prices,
-                                smooth: true,
-                                showSymbol: false,
-                                lineStyle: { color: color, width: 2 },
-                                areaStyle: {
-                                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                                        { offset: 0, color: color },
-                                        { offset: 1, color: 'rgba(255, 255, 255, 0)' }
-                                    ]),
-                                    opacity: 0.1
-                                },
-                                markLine: {
-                                    symbol: ['none', 'none'],
-                                    data: [
-                                        { 
-                                            yAxis: data.ref_price, 
-                                            name: '昨收',
-                                            label: { 
-                                                formatter: '{c}', 
-                                                position: 'start', 
-                                                color: '#666',
-                                                fontSize: 10
-                                            }
-                                        }
-                                    ],
-                                    lineStyle: { type: 'dashed', color: 'gray', width: 1, opacity: 0.7 }
-                                }
-                            }
-                        ]
-                    };
-                    chartInstance.clear();
-                    chartInstance.setOption(option);
-                };
-
-                return { 
-                    stockId, handleSearch, switchTab, loading, 
-                    rtData, errorMsg, chartType, hasData, 
-                    getColor, getDiffColor, formatTime 
-                };
-            }
-        }).mount('#app');
-    </script>
+        <script src="script.js"></script>
 </body>
 </html>

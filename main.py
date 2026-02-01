@@ -224,6 +224,35 @@ def get_intraday_chart(stock_id: str):
     except Exception as e:
         print(f"Intraday Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/api/forex/{pair}")
+def get_forex_rate(pair: str):
+    try:
+        ticker_str = pair.upper()
+        if not ticker_str.endswith("=X"):
+            ticker_str += "=X"
+            
+        ticker = yf.Ticker(ticker_str)
+        df = ticker.history(period="1d")
+        
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"找不到匯率資料: {pair}")
+
+        latest_rate = float(df['Close'].iloc[-1])
+        prev_close = float(ticker.info.get('previousClose', latest_rate))
+        
+        change = latest_rate - prev_close
+        change_percent = (change / prev_close) * 100 if prev_close else 0
+
+        return {
+            "pair": ticker_str.replace("=X", ""),
+            "rate": round(latest_rate, 4),
+            "change": round(change, 4),
+            "change_percent": round(change_percent, 2),
+            "update_time": datetime.now().strftime('%H:%M:%S')
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
