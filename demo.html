@@ -3,139 +3,164 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股即時看板與匯率監測</title>
+    <title>台股即時看板</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     
     <style>
         /* 全局設定 */
-        body { font-family: 'Microsoft JhengHei', 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        body { font-family: 'Microsoft JhengHei', sans-serif; background: #f0f2f5; margin: 0; height: 100vh; overflow: hidden; }
+        
+        /* App 佈局：左側邊欄 + 右側主內容 */
+        .app-layout { display: flex; height: 100vh; }
+        
+        /* --- 側邊欄樣式 --- */
+        .sidebar { width: 280px; background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; z-index: 10; }
+        .sidebar-header { padding: 15px; background: #f8f9fa; border-bottom: 1px solid #eee; font-weight: bold; text-align: center; }
+        .rank-tabs { display: flex; border-bottom: 1px solid #eee; }
+        .rank-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; background: #f9f9f9; color: #666; font-size: 0.9em; }
+        .rank-tab.active { background: #fff; color: #007bff; font-weight: bold; border-bottom: 2px solid #007bff; }
+        
+        .stock-list { flex: 1; overflow-y: auto; }
+        .stock-item { display: flex; justify-content: space-between; padding: 12px 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: 0.2s; }
+        .stock-item:hover { background-color: #f0f8ff; }
+        .stock-item-info { display: flex; flex-direction: column; }
+        .item-code { font-size: 0.85em; color: #888; margin-bottom: 2px; }
+        .item-name { font-weight: bold; color: #333; }
+        .item-price { font-family: monospace; font-weight: bold; }
+        
+        /* --- 主內容區域 --- */
+        .main-content { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
         
         /* 搜尋區塊 */
-        .search-box { display: flex; gap: 10px; margin-bottom: 25px; }
-        input { padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 6px; flex-grow: 1; outline: none; transition: 0.2s; }
-        input:focus { border-color: #007bff; box-shadow: 0 0 0 3px rgba(0,123,255,0.1); }
-        button { padding: 10px 24px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: 500; transition: 0.2s; }
-        button:hover { background: #0056b3; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+        input { padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 6px; flex-grow: 1; outline: none; }
+        button { padding: 10px 24px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        button:disabled { background: #ccc; }
 
-        /* 版面配置 */
+        /* 儀表板 */
         .dashboard-layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
-        
-        /* --- 左側：圖表區 --- */
         .chart-panel { flex: 2; min-width: 600px; display: flex; flex-direction: column; }
-        .tabs { display: flex; gap: 5px; margin-bottom: 0; border-bottom: 1px solid #eee; }
-        .tab-btn { padding: 10px 20px; background: #f9f9f9; border: 1px solid #eee; border-bottom: none; cursor: pointer; color: #666; border-radius: 6px 6px 0 0; font-weight: 500; margin-bottom: -1px; }
-        .tab-btn.active { background: white; color: #007bff; border-top: 3px solid #007bff; border-bottom: 1px solid white; font-weight: bold; }
-        #chart { width: 100%; height: 550px; border: 1px solid #eee; border-top: none; background: #fff; border-radius: 0 0 6px 6px; }
+        .tabs { display: flex; gap: 5px; margin-bottom: 0; }
+        .tab-btn { padding: 10px 20px; background: #f9f9f9; border: 1px solid #eee; cursor: pointer; border-radius: 6px 6px 0 0; }
+        .tab-btn.active { background: white; color: #007bff; border-top: 3px solid #007bff; font-weight: bold; }
+        #chart { width: 100%; height: 500px; border: 1px solid #eee; background: #fff; border-radius: 0 0 6px 6px; }
 
-        /* --- 右側：資訊區 --- */
         .info-wrapper { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 20px; }
-        .info-panel { background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        
+        .info-panel { background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; overflow: hidden; }
         .stock-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; }
-        .stock-title { display: flex; align-items: baseline; justify-content: space-between; }
-        .stock-name { font-size: 1.2em; font-weight: bold; color: #333; }
-        .update-time { font-size: 0.8em; color: #999; margin-top: 5px; display: block; }
-
         .data-grid { display: grid; grid-template-columns: 1fr 1fr; }
-        .data-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-bottom: 1px solid #f0f0f0; font-size: 0.95em; }
-        .col-right .data-row { border-left: 1px solid #f0f0f0; }
-
-        .label { color: #666; font-size: 0.9em; }
-        .value { font-weight: bold; font-family: 'Roboto Mono', monospace; font-size: 1.1em; }
-
-        /* 顏色 */
+        .data-row { display: flex; justify-content: space-between; padding: 12px 15px; border-bottom: 1px solid #f0f0f0; }
+        
         .text-red { color: #ef232a; }
         .text-green { color: #14b143; }
         .text-black { color: #333; }
-
-        .error-msg { color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 4px; margin-top: 10px; }
-        .loading-text { text-align: center; color: #666; padding: 20px; }
+        .error-msg { color: #721c24; background: #f8d7da; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
     </style>
 </head>
 <body>
-    <div id="app" class="container">
-        <h2>即時看板</h2>
+    <div id="app" class="app-layout">
         
-        <div class="search-box">
-            <input type="text" v-model="stockId" placeholder="輸入股票代碼 (例: 2330)" @keyup.enter="handleSearch">
-            <button @click="handleSearch" :disabled="loading">
-                {{ loading ? '讀取中...' : '查詢' }}
-            </button>
-        </div>
-
-        <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
-
-        <div class="dashboard-layout" v-if="hasData">
-            <div class="chart-panel">
-                <div class="tabs">
-                    <button class="tab-btn" :class="{ active: chartType === 'daily' }" @click="switchTab('daily')">日 K 線分析</button>
-                    <button class="tab-btn" :class="{ active: chartType === 'intraday' }" @click="switchTab('intraday')">本日即時走勢</button>
-                </div>
-                <div id="chart"></div>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                🔥 市場熱點
             </div>
-
-            <div class="info-wrapper">
-                <div class="info-panel" v-if="rtData">
-                    <div class="stock-header">
-                        <div class="stock-title">
-                            <span class="stock-name">{{ rtData.name }} ({{ rtData.code }})</span>
-                        </div>
-                        <span class="update-time">資料時間: {{ formatTime(rtData.timestamp) }}</span>
+            <div class="rank-tabs">
+                <div class="rank-tab" :class="{ active: rankType === 'up' }" @click="fetchRank('up')">漲幅排行</div>
+                <div class="rank-tab" :class="{ active: rankType === 'down' }" @click="fetchRank('down')">跌幅排行</div>
+            </div>
+            
+            <div class="stock-list" v-if="!rankLoading">
+                <div v-for="item in rankList" :key="item.code" class="stock-item" @click="selectStock(item.code)">
+                    <div class="stock-item-info">
+                        <span class="item-name">{{ item.name }}</span>
+                        <span class="item-code">{{ item.code }}</span>
                     </div>
-                    <div class="data-grid">
-                        <div class="col-left">
-                            <div class="data-row"><span class="label">成交價</span><span class="value" :class="getColor(rtData.price, rtData.prev_close)">{{ rtData.price }}</span></div>
-                            <div class="data-row"><span class="label">最高</span><span class="value" :class="getColor(rtData.high, rtData.prev_close)">{{ rtData.high }}</span></div>
-                            <div class="data-row"><span class="label">最低</span><span class="value" :class="getColor(rtData.low, rtData.prev_close)">{{ rtData.low }}</span></div>
+                    <div style="text-align: right;">
+                        <div class="item-price" :class="rankType === 'up' ? 'text-red' : 'text-green'">
+                            {{ item.price }}
                         </div>
-                        <div class="col-right">
-                            <div class="data-row"><span class="label">漲跌幅</span><span class="value" :class="getDiffColor(rtData.change)">{{ rtData.change_percent }}%</span></div>
-                            <div class="data-row"><span class="label">昨收</span><span class="value">{{ rtData.prev_close }}</span></div>
-                            <div class="data-row"><span class="label">總量</span><span class="value">{{ rtData.volume }}</span></div>
+                        <div :class="rankType === 'up' ? 'text-red' : 'text-green'" style="font-size: 0.8em;">
+                            {{ item.percent }}
                         </div>
                     </div>
                 </div>
+                <div v-if="rankList.length === 0" style="padding: 20px; text-align: center; color: #999;">
+                    暫無資料
+                </div>
+            </div>
+            <div v-else style="padding: 20px; text-align: center; color: #666;">讀取中...</div>
+        </aside>
 
-                <div class="info-panel" v-if="forexData || true"> <div class="stock-header" style="background: #eef2f7;">
-                    <div class="stock-title">
-                        <span class="stock-name">匯率查詢</span>
+        <main class="main-content">
+            <div class="search-box">
+                <input type="text" v-model="stockId" placeholder="輸入股票代碼 (例: 2330)" @keyup.enter="handleSearch">
+                <button @click="handleSearch" :disabled="loading">
+                    {{ loading ? '讀取中...' : '查詢' }}
+                </button>
+            </div>
+
+            <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
+
+            <div class="dashboard-layout" v-if="hasData">
+                <div class="chart-panel">
+                    <div class="tabs">
+                        <button class="tab-btn" :class="{ active: chartType === 'daily' }" @click="switchTab('daily')">日 K 線分析</button>
+                        <button class="tab-btn" :class="{ active: chartType === 'intraday' }" @click="switchTab('intraday')">本日即時走勢</button>
                     </div>
+                    <div id="chart"></div>
                 </div>
-                <div style="padding: 10px; display: flex; gap: 5px; border-bottom: 1px solid #eee;">
-                    <input type="text" v-model="forexPair" placeholder="例如: JPYTWD" style="padding: 5px; font-size: 14px;">
-                    <button @click="queryForex" style="padding: 5px 10px; font-size: 14px;">查詢</button>
-                </div>
-                
-                <div class="data-grid" v-if="forexData">
-                    <div class="data-row" style="grid-column: 1 / -1;">
-                        <span class="label">貨幣對</span>
-                        <span class="value">{{ forexData.pair }}</span>
+
+                <div class="info-wrapper">
+                    <div class="info-panel" v-if="rtData">
+                        <div class="stock-header">
+                            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:1.2em;">
+                                <span>{{ rtData.name }} ({{ rtData.code }})</span>
+                            </div>
+                            <span style="font-size:0.8em; color:#999;">{{ formatTime(rtData.timestamp) }}</span>
+                        </div>
+                        <div class="data-grid">
+                            <div class="data-row"><span style="color:#666;">成交價</span><span class="value" :class="getColor(rtData.price, rtData.prev_close)">{{ rtData.price }}</span></div>
+                            <div class="data-row"><span style="color:#666;">漲跌幅</span><span class="value" :class="getDiffColor(rtData.change)">{{ rtData.change_percent }}%</span></div>
+                            <div class="data-row"><span style="color:#666;">最高</span><span class="value">{{ rtData.high }}</span></div>
+                            <div class="data-row"><span style="color:#666;">最低</span><span class="value">{{ rtData.low }}</span></div>
+                            <div class="data-row"><span style="color:#666;">總量</span><span class="value">{{ rtData.volume }}</span></div>
+                        </div>
                     </div>
-                    <div class="data-row" style="grid-column: 1 / -1;">
-                        <span class="label">即時匯率</span>
-                        <span class="value">{{ forexData.rate }}</span>
+
+                    <div class="info-panel">
+                        <div class="stock-header" style="background: #eef2f7;">
+                            <span style="font-weight:bold;">匯率看板</span>
+                            <span v-if="forexData" style="float:right; font-size:0.8em; color:#666;">{{ forexData.update_time }}</span>
+                        </div>
+                        <div style="padding: 10px; display: flex; gap: 5px; align-items: center; border-bottom: 1px solid #eee;">
+                            <select v-model="currencyFrom" @change="queryForex" style="padding: 8px; flex: 1;">
+                                <option v-for="c in currencyOptions" :key="c.code" :value="c.code">{{ c.name }}</option>
+                            </select>
+                            <span style="color: #999;">➜</span>
+                            <select v-model="currencyTo" @change="queryForex" style="padding: 8px; flex: 1;">
+                                <option v-for="c in currencyOptions" :key="c.code" :value="c.code">{{ c.name }}</option>
+                            </select>
+                            <button @click="queryForex" :disabled="forexLoading">查詢</button>
+                        </div>
+                        <div class="data-grid" v-if="forexData">
+                            <div class="data-row" style="grid-column: 1 / -1;">
+                                <span>即時匯率</span>
+                                <span class="value" style="color: #007bff;">{{ forexData.rate }}</span>
+                            </div>
+                            <div class="data-row" style="grid-column: 1 / -1;">
+                                <span>漲跌幅</span>
+                                <span class="value" :class="getDiffColor(forexData.change)">{{ forexData.change_percent }}%</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="data-row" style="grid-column: 1 / -1;">
-                        <span class="label">漲跌幅</span>
-                        <span class="value" :class="getDiffColor(forexData.change)">
-                            {{ forexData.change_percent }}%
-                        </span>
-                    </div>
-                </div>
-                <div v-else style="padding: 20px; text-align: center; color: #999;">
-                    請輸入貨幣對進行查詢
                 </div>
             </div>
-            </div>
-        </div>
-        
-        <div v-else-if="loading" class="loading-text">資料讀取中...</div>
+            
+            <div v-else-if="loading" style="padding:40px; text-align:center; color:#666;">資料讀取中...</div>
+        </main>
     </div>
-
-        <script src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
